@@ -9,8 +9,8 @@ const LiveTrackerView: React.FC = () => {
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
-      case OrderStatus.PENDING: return 'bg-blue-100 text-blue-600 border-blue-200';
-      case OrderStatus.PREPARING: return 'bg-orange-100 text-orange-600 border-orange-200';
+      case OrderStatus.PENDING: return 'bg-cyan-100 text-cyan-600 border-cyan-200';
+      case OrderStatus.PREPARING: return 'bg-blue-100 text-blue-600 border-blue-200';
       case OrderStatus.READY: return 'bg-green-100 text-green-600 border-green-200';
       case OrderStatus.PAID: return 'bg-gray-100 text-gray-400 border-gray-200';
       default: return 'bg-gray-100 text-gray-500';
@@ -21,7 +21,7 @@ const LiveTrackerView: React.FC = () => {
     <div className="p-6 bg-gray-50 min-h-screen pb-24">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-black text-gray-900 tracking-tighter uppercase">Statut en Direct</h1>
-        <span className="bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full animate-pulse font-bold uppercase tracking-tighter">Connecté</span>
+        <span className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full animate-pulse font-bold uppercase tracking-tighter">Connecté</span>
       </div>
 
       <div className="space-y-4">
@@ -40,12 +40,12 @@ const LiveTrackerView: React.FC = () => {
                 <div>
                   <h3 className="font-black text-gray-800 text-sm flex items-center">
                     Table {order.tableNumber}
-                    {order.customerName && <span className="ml-2 text-[8px] text-orange-500 font-bold uppercase tracking-widest">({order.customerName})</span>}
+                    {order.customerName && <span className="ml-2 text-[8px] text-blue-600 font-bold uppercase tracking-widest">({order.customerName})</span>}
                   </h3>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">MàJ: {order.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
               </div>
-              
+
               <div className={`px-4 py-2 rounded-2xl border-2 text-[8px] font-black uppercase tracking-widest ${getStatusColor(order.status)}`}>
                 {order.status}
               </div>

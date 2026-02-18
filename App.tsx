@@ -31,6 +31,8 @@ interface AppContextType {
   setCurrency: (currency: Currency) => void;
   addOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  isSaaSAuthenticated: boolean;
+  setIsSaaSAuthenticated: (val: boolean) => void;
   loading: boolean;
 }
 
@@ -49,7 +51,7 @@ const staffToUser = (s: StaffUser): User => ({
 const supaProduitToProduct = (p: SupaProduit): Product => ({
   id: p.id,
   name: p.nom,
-  category: '',
+  category: p.categorie || '',
   price: p.prix,
   image: p.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400',
   description: p.description || undefined,
@@ -71,7 +73,7 @@ const BottomNav: React.FC = () => {
   ];
 
   const handleLogout = async () => {
-    await authApi.signOut();
+    // Return to role selection instead of full logout
     context?.setUser(null);
   };
 
@@ -81,7 +83,7 @@ const BottomNav: React.FC = () => {
         <button
           key={tab.path}
           onClick={() => navigate(tab.path)}
-          className={`flex flex-col items-center space-y-1 transition-all ${location.pathname === tab.path ? 'text-orange-500 scale-110' : 'text-gray-400'}`}
+          className={`flex flex-col items-center space-y-1 transition-all ${location.pathname === tab.path ? 'text-blue-600 scale-110' : 'text-gray-400'}`}
         >
           <span className="text-xl">{tab.icon}</span>
           <span className="text-[10px] font-bold uppercase tracking-widest">{tab.label}</span>
@@ -96,13 +98,30 @@ const BottomNav: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUserState] = useState<User | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [currency, setCurrencyState] = useState<Currency>(Currency.ARIARY);
+  const [isSaaSAuthenticated, setIsSaaSAuthenticatedState] = useState<boolean>(() => {
+    return localStorage.getItem('gastroflow_saas_auth') === 'true';
+  });
   const [loading, setLoading] = useState(true);
+
+  // Track whether the current user was set via direct role login (no Supabase Auth session)
+  const directLoginRef = React.useRef(false);
+
+  // Wrapper: when setting user directly (role login), mark as direct
+  // When clearing (logout), clear the flag too
+  const setUser = React.useCallback((u: User | null) => {
+    if (u) {
+      directLoginRef.current = true;
+    } else {
+      directLoginRef.current = false;
+    }
+    setUserState(u);
+  }, []);
 
   // Load initial data from Supabase
   useEffect(() => {
@@ -131,25 +150,58 @@ const App: React.FC = () => {
 
   // Handle auth state
   useEffect(() => {
-    // Check existing session on mount
-    authApi.getSession().then(async (session) => {
-      if (session) {
-        const staff = await authApi.getCurrentStaff();
-        if (staff) setUser(staffToUser(staff));
+    let mounted = true;
+
+    const checkAuth = async () => {
+      try {
+        const session = await authApi.getSession();
+        if (session && mounted) {
+          const staff = await authApi.getCurrentStaff().catch(() => null);
+          if (staff) {
+            // Restore from real Supabase Auth session — not a direct login
+            directLoginRef.current = false;
+            setUserState(staffToUser(staff));
+          } else {
+            await authApi.signOut().catch(() => { });
+            setUserState(null);
+          }
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
-    });
+    };
+
+    checkAuth();
 
     // Listen to auth changes
-    const { data: { subscription } } = authApi.onAuthStateChange((staffUser) => {
+    const { data: { subscription } } = authApi.onAuthStateChange(async (staffUser) => {
+      if (!mounted) return;
+
       if (staffUser) {
-        setUser(staffToUser(staffUser));
+        // Auth session found — always update from Supabase Auth (admin login)
+        directLoginRef.current = false;
+        setUserState(staffToUser(staffUser));
       } else {
-        setUser(null);
+        // No auth session — only clear user if it wasn't a direct role login
+        if (!directLoginRef.current) {
+          setUserState(null);
+        }
       }
+      setLoading(false); // Auth state change also signals loading done
     });
 
-    return () => subscription.unsubscribe();
+    // Safety timeout to ensure we don't stay stuck forever
+    const timeout = setTimeout(() => {
+      if (mounted && loading) setLoading(false);
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   // Load active orders when user logs in
@@ -185,6 +237,15 @@ const App: React.FC = () => {
   const setCurrency = async (c: Currency) => {
     setCurrencyState(c);
     await settingsApi.set('currency', c).catch(console.error);
+  };
+
+  const setIsSaaSAuthenticated = (val: boolean) => {
+    setIsSaaSAuthenticatedState(val);
+    if (val) {
+      localStorage.setItem('gastroflow_saas_auth', 'true');
+    } else {
+      localStorage.removeItem('gastroflow_saas_auth');
+    }
   };
 
   const addOrder = async (newOrder: Order) => {
@@ -251,14 +312,15 @@ const App: React.FC = () => {
 
   const contextValue = useMemo(() => ({
     user, setUser, orders, setOrders, products, setProducts, users, setUsers,
-    categories, setCategories, currency, setCurrency, addOrder, updateOrderStatus, loading
-  }), [user, orders, products, users, categories, currency, loading]);
+    categories, setCategories, currency, setCurrency, addOrder, updateOrderStatus,
+    isSaaSAuthenticated, setIsSaaSAuthenticated, loading
+  }), [user, orders, products, users, categories, currency, isSaaSAuthenticated, loading]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>

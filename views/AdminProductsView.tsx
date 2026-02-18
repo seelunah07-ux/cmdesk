@@ -55,6 +55,7 @@ const AdminProductsView: React.FC = () => {
         prix: editingProduct.price,
         stock: editingProduct.isActive ? 100 : 0, // Simplified stock handling
         image_url: imageUrl,
+        categorie: editingProduct.category,
       };
 
       const exists = context?.products.find(p => p.id === editingProduct.id);
@@ -67,15 +68,15 @@ const AdminProductsView: React.FC = () => {
       }
       setEditingProduct(null);
       setSelectedFile(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving product:', err);
-      alert("Erreur lors de l'enregistrement.");
+      alert("Erreur lors de l'enregistrement: " + (err.message || "Erreur inconnue"));
     }
   };
 
   const addNewProduct = () => {
     setEditingProduct({
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       name: '',
       category: categories[0] || '',
       price: 0,
@@ -89,7 +90,7 @@ const AdminProductsView: React.FC = () => {
       try {
         await categoriesApi.create({
           nom: newCategory.trim(),
-          couleur: '#f97316',
+          couleur: '#2563eb',
           icone: '🍽️'
         });
         context?.setCategories([...categories, newCategory.trim()]);
@@ -120,7 +121,7 @@ const AdminProductsView: React.FC = () => {
       {/* Sidebar */}
       <div className="w-full md:w-64 bg-white border-r p-6 flex flex-col space-y-8 sticky top-0 md:h-screen">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
@@ -132,7 +133,7 @@ const AdminProductsView: React.FC = () => {
           <Link to="/admin" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
             <span>Dashboard</span>
           </Link>
-          <Link to="/admin/products" className="flex items-center space-x-3 p-3 rounded-xl bg-orange-50 text-orange-600 font-bold">
+          <Link to="/admin/products" className="flex items-center space-x-3 p-3 rounded-xl bg-blue-50 text-blue-600 font-bold border-l-4 border-blue-600">
             <span>Inventaire</span>
           </Link>
           <Link to="/admin/users" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
@@ -147,7 +148,7 @@ const AdminProductsView: React.FC = () => {
             <h2 className="text-3xl font-black text-gray-900">Gestion de l'Inventaire</h2>
             <p className="text-gray-500">Gérez votre catalogue, prix et catégories</p>
           </div>
-          <button onClick={addNewProduct} className="bg-orange-500 px-6 py-3 rounded-2xl font-bold text-white shadow-lg shadow-orange-100 flex items-center space-x-2">
+          <button onClick={addNewProduct} className="bg-blue-600 px-6 py-3 rounded-2xl font-bold text-white shadow-lg shadow-blue-100 flex items-center space-x-2">
             <span>Ajouter un Produit</span>
           </button>
         </div>
@@ -176,8 +177,8 @@ const AdminProductsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <table className="w-full text-left">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="w-full text-left min-w-[700px]">
             <thead>
               <tr className="border-b text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50">
                 <th className="px-6 py-4">Produit</th>
@@ -205,8 +206,26 @@ const AdminProductsView: React.FC = () => {
                     <span className="text-sm">{p.isActive ? 'Actif' : 'Inactif'}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button onClick={() => setEditingProduct(p)} className="p-2 text-gray-400 hover:text-orange-500">Modifier</button>
-                    <button onClick={() => deleteProduct(p.id)} className="p-2 text-gray-400 hover:text-red-500 ml-2">Supprimer</button>
+                    <div className="flex items-center justify-end space-x-2">
+                      <button
+                        onClick={() => setEditingProduct(p)}
+                        className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                        title="Modifier"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(p.id)}
+                        className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                        title="Supprimer"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -250,9 +269,26 @@ const AdminProductsView: React.FC = () => {
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div className="flex space-x-3">
-                <button type="submit" className="flex-1 bg-gray-900 text-white font-black py-4 rounded-2xl uppercase text-xs">Enregistrer</button>
-                <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-gray-100 text-gray-400 font-black py-4 rounded-2xl uppercase text-xs">Annuler</button>
+              <div className="flex flex-col space-y-3">
+                <div className="flex space-x-3">
+                  <button type="submit" className="flex-1 bg-gray-900 text-white font-black py-4 rounded-2xl uppercase text-xs">Enregistrer</button>
+                  <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-gray-100 text-gray-400 font-black py-4 rounded-2xl uppercase text-xs">Annuler</button>
+                </div>
+                {context?.products.some(p => p.id === editingProduct.id) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteProduct(editingProduct.id);
+                      setEditingProduct(null);
+                    }}
+                    className="w-full bg-red-50 text-red-600 font-extrabold py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-600 hover:text-white transition-all border-2 border-red-100 mt-4 flex items-center justify-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>Supprimer le produit</span>
+                  </button>
+                )}
               </div>
             </form>
           </div>

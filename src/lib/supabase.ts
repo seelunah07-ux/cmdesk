@@ -7,7 +7,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Missing Supabase environment variables. Check your .env.local file.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'gastroflow-auth-token'
+    }
+});
 
 // ============================================
 // TYPE DEFINITIONS
@@ -38,6 +45,7 @@ export interface Produit {
     prix: number;
     stock: number;
     image_url?: string | null;
+    categorie?: string | null;
     date_creation: string;
 }
 
@@ -124,14 +132,34 @@ export const authApi = {
 
     /** Get current user's staff profile */
     getCurrentStaff: async (): Promise<StaffUser | null> => {
-        const session = await authApi.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         if (!session) return null;
+
         const { data, error } = await supabase
             .from('users')
             .select('*')
             .eq('auth_id', session.user.id)
-            .single();
-        if (error) return null;
+            .maybeSingle(); // Better than single() to avoid throwing on 0 rows
+
+        if (error) {
+            console.error('Error fetching staff profile:', error);
+            return null;
+        }
+        return data as StaffUser;
+    },
+
+    /** Helper to get staff by auth_id (useful during login) */
+    getStaffByAuthId: async (authId: string): Promise<StaffUser | null> => {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('auth_id', authId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching staff by authId:', error);
+            return null;
+        }
         return data as StaffUser;
     },
 
@@ -139,12 +167,19 @@ export const authApi = {
     onAuthStateChange: (callback: (user: StaffUser | null) => void) => {
         return supabase.auth.onAuthStateChange(async (event, session) => {
             if (session) {
-                const { data } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('auth_id', session.user.id)
-                    .single();
-                callback(data as StaffUser | null);
+                // Try finding by ID first
+                let staff = await authApi.getStaffByAuthId(session.user.id);
+
+                // Fallback to email if no ID link exists yet
+                if (!staff && session.user.email) {
+                    staff = await staffApi.getByEmail(session.user.email).catch(() => null);
+                    if (staff) {
+                        // Link the ID for next time
+                        await staffApi.update(staff.id, { auth_id: session.user.id }).catch(console.error);
+                    }
+                }
+
+                callback(staff);
             } else {
                 callback(null);
             }
@@ -201,7 +236,7 @@ export const staffApi = {
             .from('users')
             .select('*')
             .eq('email', email)
-            .single();
+            .maybeSingle();
         if (error) throw error;
         return data as StaffUser;
     },

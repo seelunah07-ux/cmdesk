@@ -95,7 +95,7 @@ const SettingsView: React.FC = () => {
               <select
                 value={context?.currency}
                 onChange={(e) => context?.setCurrency(e.target.value as Currency)}
-                className="bg-gray-50 border-0 rounded-xl py-2 px-4 text-[10px] font-black text-orange-600 uppercase focus:ring-2 focus:ring-orange-500"
+                className="bg-gray-50 border-0 rounded-xl py-2 px-4 text-[10px] font-black text-blue-600 uppercase focus:ring-2 focus:ring-blue-600"
               >
                 <option value={Currency.ARIARY}>Ariary (Ar)</option>
                 <option value={Currency.USD}>Dollar ($)</option>
@@ -111,7 +111,7 @@ const SettingsView: React.FC = () => {
         <input
           type="text"
           placeholder="Rechercher dans le catalogue..."
-          className="w-full bg-white border-0 rounded-[1.5rem] py-4 px-6 pl-12 shadow-sm text-sm font-bold focus:ring-2 focus:ring-orange-500 placeholder:text-gray-300"
+          className="w-full bg-white border-0 rounded-[1.5rem] py-4 px-6 pl-12 shadow-sm text-sm font-bold focus:ring-2 focus:ring-blue-600 placeholder:text-gray-300"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -123,13 +123,13 @@ const SettingsView: React.FC = () => {
           <div
             key={product.id}
             onClick={() => setEditingProduct(product)}
-            className={`bg-white rounded-[2rem] p-4 shadow-sm border border-gray-100 flex items-center justify-between transition-all active:scale-95 cursor-pointer hover:border-orange-200 ${!product.isActive ? 'opacity-40 grayscale' : ''}`}
+            className={`bg-white rounded-[2rem] p-4 shadow-sm border border-gray-100 flex items-center justify-between transition-all active:scale-95 cursor-pointer hover:border-blue-300 ${!product.isActive ? 'opacity-40 grayscale' : ''}`}
           >
             <div className="flex items-center space-x-4">
               <img src={product.image} className="w-14 h-14 rounded-2xl object-cover shadow-sm" alt="" />
               <div>
                 <h3 className="font-bold text-gray-900 text-xs uppercase tracking-tighter">{product.name}</h3>
-                <p className="text-[10px] text-orange-500 font-black uppercase tracking-widest mt-0.5">{formatPrice(product.price)}</p>
+                <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-0.5">{formatPrice(product.price)}</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -184,7 +184,7 @@ const SettingsView: React.FC = () => {
                   type="text"
                   value={editingProduct.name}
                   onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-orange-500"
+                  className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
@@ -197,12 +197,12 @@ const SettingsView: React.FC = () => {
                     step="100"
                     value={editingProduct.price}
                     onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-orange-500"
+                    className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-blue-600"
                   />
                   <select
                     value={editingProduct.category}
                     onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                    className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-orange-500 uppercase tracking-widest"
+                    className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-blue-600 uppercase tracking-widest"
                   >
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
