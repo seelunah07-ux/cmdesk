@@ -3,23 +3,32 @@ import React, { useContext, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AppContext } from '../App';
 import { Product } from '../types';
+import { produitsApi, categoriesApi, storageApi } from '../src/lib/supabase';
 
 const AdminProductsView: React.FC = () => {
   const context = useContext(AppContext);
   const categories = context?.categories || [];
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newCategory, setNewCategory] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
-      context?.setProducts(prev => prev.filter(p => p.id !== id));
+      try {
+        await produitsApi.delete(id);
+        context?.setProducts(prev => prev.filter(p => p.id !== id));
+      } catch (err) {
+        console.error('Error deleting product:', err);
+        alert('Erreur lors de la suppression.');
+      }
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingProduct) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setEditingProduct({ ...editingProduct, image: reader.result as string });
@@ -28,18 +37,40 @@ const AdminProductsView: React.FC = () => {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
 
-    context?.setProducts(prev => {
-      const exists = prev.find(p => p.id === editingProduct.id);
-      if (exists) {
-        return prev.map(p => p.id === editingProduct.id ? editingProduct : p);
+    try {
+      let imageUrl = editingProduct.image;
+
+      // Handle image upload if a new file was selected
+      if (selectedFile) {
+        imageUrl = await storageApi.uploadProductImage(selectedFile, editingProduct.id);
       }
-      return [...prev, editingProduct];
-    });
-    setEditingProduct(null);
+
+      const productData = {
+        nom: editingProduct.name,
+        description: editingProduct.description || null,
+        prix: editingProduct.price,
+        stock: editingProduct.isActive ? 100 : 0, // Simplified stock handling
+        image_url: imageUrl,
+      };
+
+      const exists = context?.products.find(p => p.id === editingProduct.id);
+      if (exists) {
+        await produitsApi.update(editingProduct.id, productData);
+        context?.setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...editingProduct, image: imageUrl } : p));
+      } else {
+        const newProd = await produitsApi.create(productData);
+        context?.setProducts(prev => [...prev, { ...editingProduct, id: newProd.id, image: imageUrl }]);
+      }
+      setEditingProduct(null);
+      setSelectedFile(null);
+    } catch (err) {
+      console.error('Error saving product:', err);
+      alert("Erreur lors de l'enregistrement.");
+    }
   };
 
   const addNewProduct = () => {
@@ -53,16 +84,34 @@ const AdminProductsView: React.FC = () => {
     });
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      context?.setCategories([...categories, newCategory.trim()]);
-      setNewCategory('');
+      try {
+        await categoriesApi.create({
+          nom: newCategory.trim(),
+          couleur: '#f97316',
+          icone: '🍽️'
+        });
+        context?.setCategories([...categories, newCategory.trim()]);
+        setNewCategory('');
+      } catch (err) {
+        console.error('Error adding category:', err);
+      }
     }
   };
 
-  const removeCategory = (cat: string) => {
+  const removeCategory = async (cat: string) => {
     if (confirm(`Supprimer la catégorie "${cat}" ? Les produits associés ne seront pas supprimés mais leur catégorie sera vide.`)) {
-      context?.setCategories(prev => prev.filter(c => c !== cat));
+      try {
+        const cats = await categoriesApi.getAll();
+        const catObj = cats.find(c => c.nom === cat);
+        if (catObj) {
+          await categoriesApi.delete(catObj.id);
+        }
+        context?.setCategories(prev => prev.filter(c => c !== cat));
+      } catch (err) {
+        console.error('Error deleting category:', err);
+      }
     }
   };
 
@@ -81,88 +130,88 @@ const AdminProductsView: React.FC = () => {
 
         <nav className="flex-1 space-y-2">
           <Link to="/admin" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
-             <span>Dashboard</span>
+            <span>Dashboard</span>
           </Link>
           <Link to="/admin/products" className="flex items-center space-x-3 p-3 rounded-xl bg-orange-50 text-orange-600 font-bold">
-             <span>Inventaire</span>
+            <span>Inventaire</span>
           </Link>
           <Link to="/admin/users" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
-             <span>Personnel</span>
+            <span>Personnel</span>
           </Link>
         </nav>
       </div>
 
       <div className="flex-1 p-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-           <div>
-              <h2 className="text-3xl font-black text-gray-900">Gestion de l'Inventaire</h2>
-              <p className="text-gray-500">Gérez votre catalogue, prix et catégories</p>
-           </div>
-           <button onClick={addNewProduct} className="bg-orange-500 px-6 py-3 rounded-2xl font-bold text-white shadow-lg shadow-orange-100 flex items-center space-x-2">
-              <span>Ajouter un Produit</span>
-           </button>
+          <div>
+            <h2 className="text-3xl font-black text-gray-900">Gestion de l'Inventaire</h2>
+            <p className="text-gray-500">Gérez votre catalogue, prix et catégories</p>
+          </div>
+          <button onClick={addNewProduct} className="bg-orange-500 px-6 py-3 rounded-2xl font-bold text-white shadow-lg shadow-orange-100 flex items-center space-x-2">
+            <span>Ajouter un Produit</span>
+          </button>
         </div>
 
         {/* Gestion des Catégories */}
         <div className="bg-white rounded-[2rem] p-6 mb-8 border border-gray-100 shadow-sm">
-           <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Gestion des Catégories</h3>
-           <div className="flex flex-wrap gap-2 mb-4">
-              {categories.map(cat => (
-                <div key={cat} className="flex items-center bg-gray-50 border rounded-xl px-3 py-2 space-x-2 group">
-                   <span className="text-[10px] font-bold text-gray-700 uppercase">{cat}</span>
-                   <button onClick={() => removeCategory(cat)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
-                </div>
-              ))}
-           </div>
-           <div className="flex space-x-2">
-              <input 
-                type="text" 
-                placeholder="Nouvelle catégorie..."
-                className="bg-gray-50 border-0 rounded-xl px-4 py-2 text-sm font-bold flex-1"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
-              />
-              <button onClick={handleAddCategory} className="bg-gray-900 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase">Ajouter</button>
-           </div>
+          <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Gestion des Catégories</h3>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {categories.map(cat => (
+              <div key={cat} className="flex items-center bg-gray-50 border rounded-xl px-3 py-2 space-x-2 group">
+                <span className="text-[10px] font-bold text-gray-700 uppercase">{cat}</span>
+                <button onClick={() => removeCategory(cat)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              placeholder="Nouvelle catégorie..."
+              className="bg-gray-50 border-0 rounded-xl px-4 py-2 text-sm font-bold flex-1"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+            />
+            <button onClick={handleAddCategory} className="bg-gray-900 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase">Ajouter</button>
+          </div>
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-           <table className="w-full text-left">
-              <thead>
-                 <tr className="border-b text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50">
-                    <th className="px-6 py-4">Produit</th>
-                    <th className="px-6 py-4">Catégorie</th>
-                    <th className="px-6 py-4">Prix</th>
-                    <th className="px-6 py-4">Statut</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
-                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                 {context?.products.map((p) => (
-                    <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                       <td className="px-6 py-4">
-                          <div className="flex items-center space-x-4">
-                             <img src={p.image} className="w-12 h-12 rounded-xl object-cover" alt="" />
-                             <p className="font-bold text-gray-900">{p.name}</p>
-                          </div>
-                       </td>
-                       <td className="px-6 py-4">
-                          <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-bold text-gray-500">{p.category}</span>
-                       </td>
-                       <td className="px-6 py-4 font-bold text-gray-900">{p.price.toLocaleString()} Ar</td>
-                       <td className="px-6 py-4">
-                          <span className={`w-2 h-2 rounded-full inline-block mr-2 ${p.isActive ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                          <span className="text-sm">{p.isActive ? 'Actif' : 'Inactif'}</span>
-                       </td>
-                       <td className="px-6 py-4 text-right">
-                          <button onClick={() => setEditingProduct(p)} className="p-2 text-gray-400 hover:text-orange-500">Modifier</button>
-                          <button onClick={() => deleteProduct(p.id)} className="p-2 text-gray-400 hover:text-red-500 ml-2">Supprimer</button>
-                       </td>
-                    </tr>
-                 ))}
-              </tbody>
-           </table>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50">
+                <th className="px-6 py-4">Produit</th>
+                <th className="px-6 py-4">Catégorie</th>
+                <th className="px-6 py-4">Prix</th>
+                <th className="px-6 py-4">Statut</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {context?.products.map((p) => (
+                <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-4">
+                      <img src={p.image} className="w-12 h-12 rounded-xl object-cover" alt="" />
+                      <p className="font-bold text-gray-900">{p.name}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-bold text-gray-500">{p.category}</span>
+                  </td>
+                  <td className="px-6 py-4 font-bold text-gray-900">{p.price.toLocaleString()} Ar</td>
+                  <td className="px-6 py-4">
+                    <span className={`w-2 h-2 rounded-full inline-block mr-2 ${p.isActive ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    <span className="text-sm">{p.isActive ? 'Actif' : 'Inactif'}</span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button onClick={() => setEditingProduct(p)} className="p-2 text-gray-400 hover:text-orange-500">Modifier</button>
+                    <button onClick={() => deleteProduct(p.id)} className="p-2 text-gray-400 hover:text-red-500 ml-2">Supprimer</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -176,26 +225,26 @@ const AdminProductsView: React.FC = () => {
                 <p className="text-center text-[10px] font-black text-gray-400 uppercase mt-2">Cliquer pour changer l'image</p>
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
               </div>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Nom du produit"
                 value={editingProduct.name}
-                onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
                 className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold"
                 required
               />
               <div className="grid grid-cols-2 gap-4">
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   placeholder="Prix (Ar)"
                   value={editingProduct.price}
-                  onChange={(e) => setEditingProduct({...editingProduct, price: parseFloat(e.target.value) || 0})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
                   className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold"
                   required
                 />
-                <select 
+                <select
                   value={editingProduct.category}
-                  onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
                   className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold"
                 >
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}

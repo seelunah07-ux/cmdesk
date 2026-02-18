@@ -2,29 +2,51 @@
 import React, { useState, useContext, useRef } from 'react';
 import { AppContext } from '../App';
 import { Product, Currency } from '../types';
-import { CATEGORIES, EXCHANGE_RATES } from '../constants';
+import { EXCHANGE_RATES } from '../constants';
+import { produitsApi, storageApi } from '../src/lib/supabase';
 
 const SettingsView: React.FC = () => {
   const context = useContext(AppContext);
+  const categories = context?.categories || [];
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const products = context?.products || [];
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
 
-    context?.setProducts(prev => 
-      prev.map(p => p.id === editingProduct.id ? editingProduct : p)
-    );
-    setEditingProduct(null);
+    try {
+      let imageUrl = editingProduct.image;
+      if (selectedFile) {
+        imageUrl = await storageApi.uploadProductImage(selectedFile, editingProduct.id);
+      }
+
+      await produitsApi.update(editingProduct.id, {
+        nom: editingProduct.name,
+        prix: editingProduct.price,
+        image_url: imageUrl,
+        stock: editingProduct.isActive ? 100 : 0
+      });
+
+      context?.setProducts(prev =>
+        prev.map(p => p.id === editingProduct.id ? { ...editingProduct, image: imageUrl } : p)
+      );
+      setEditingProduct(null);
+      setSelectedFile(null);
+    } catch (err) {
+      console.error('Error saving product:', err);
+      alert("Erreur lors de l'enregistrement.");
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingProduct) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setEditingProduct({ ...editingProduct, image: reader.result as string });
@@ -37,7 +59,7 @@ const SettingsView: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const filteredProducts = products.filter(p => 
+  const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -63,30 +85,30 @@ const SettingsView: React.FC = () => {
 
       {/* Section Config Globale */}
       <div className="bg-white rounded-[2rem] p-6 mb-8 border border-gray-100 shadow-sm">
-         <h2 className="text-[10px] font-black uppercase text-gray-900 tracking-widest mb-4 flex items-center">
-           <span className="mr-2">🌍</span> Préférences Globales
-         </h2>
-         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-               <span className="text-xs font-bold text-gray-500 uppercase tracking-tighter">Devise Active</span>
-               <div className="text-right">
-                <select 
-                  value={context?.currency} 
-                  onChange={(e) => context?.setCurrency(e.target.value as Currency)}
-                  className="bg-gray-50 border-0 rounded-xl py-2 px-4 text-[10px] font-black text-orange-600 uppercase focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value={Currency.ARIARY}>Ariary (Ar)</option>
-                  <option value={Currency.USD}>Dollar ($)</option>
-                  <option value={Currency.EURO}>Euro (€)</option>
-                </select>
-                <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">1$ = 4500Ar | 1€ = 5200Ar</p>
-               </div>
+        <h2 className="text-[10px] font-black uppercase text-gray-900 tracking-widest mb-4 flex items-center">
+          <span className="mr-2">🌍</span> Préférences Globales
+        </h2>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-tighter">Devise Active</span>
+            <div className="text-right">
+              <select
+                value={context?.currency}
+                onChange={(e) => context?.setCurrency(e.target.value as Currency)}
+                className="bg-gray-50 border-0 rounded-xl py-2 px-4 text-[10px] font-black text-orange-600 uppercase focus:ring-2 focus:ring-orange-500"
+              >
+                <option value={Currency.ARIARY}>Ariary (Ar)</option>
+                <option value={Currency.USD}>Dollar ($)</option>
+                <option value={Currency.EURO}>Euro (€)</option>
+              </select>
+              <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">1$ = 4500Ar | 1€ = 5200Ar</p>
             </div>
-         </div>
+          </div>
+        </div>
       </div>
 
       <div className="mb-6 relative">
-        <input 
+        <input
           type="text"
           placeholder="Rechercher dans le catalogue..."
           className="w-full bg-white border-0 rounded-[1.5rem] py-4 px-6 pl-12 shadow-sm text-sm font-bold focus:ring-2 focus:ring-orange-500 placeholder:text-gray-300"
@@ -98,8 +120,8 @@ const SettingsView: React.FC = () => {
 
       <div className="space-y-3 overflow-y-auto flex-1">
         {filteredProducts.map(product => (
-          <div 
-            key={product.id} 
+          <div
+            key={product.id}
             onClick={() => setEditingProduct(product)}
             className={`bg-white rounded-[2rem] p-4 shadow-sm border border-gray-100 flex items-center justify-between transition-all active:scale-95 cursor-pointer hover:border-orange-200 ${!product.isActive ? 'opacity-40 grayscale' : ''}`}
           >
@@ -133,24 +155,23 @@ const SettingsView: React.FC = () => {
                   <div className="absolute inset-0 bg-black/30 rounded-[2rem] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
                     <span className="text-white text-[10px] font-black uppercase tracking-widest">Changer</span>
                   </div>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
                     accept="image/*"
                     onChange={handleFileChange}
                   />
                 </div>
                 <div className="flex-1">
                   <label className="block text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2">Statut Inventaire</label>
-                  <button 
+                  <button
                     type="button"
-                    onClick={() => setEditingProduct({...editingProduct, isActive: !editingProduct.isActive})}
-                    className={`px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all w-full border-2 ${
-                      editingProduct.isActive 
-                        ? 'bg-green-50 text-green-600 border-green-100' 
-                        : 'bg-red-50 text-red-600 border-red-100'
-                    }`}
+                    onClick={() => setEditingProduct({ ...editingProduct, isActive: !editingProduct.isActive })}
+                    className={`px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all w-full border-2 ${editingProduct.isActive
+                      ? 'bg-green-50 text-green-600 border-green-100'
+                      : 'bg-red-50 text-red-600 border-red-100'
+                      }`}
                   >
                     {editingProduct.isActive ? 'En Stock' : 'Épuisé'}
                   </button>
@@ -159,10 +180,10 @@ const SettingsView: React.FC = () => {
 
               <div>
                 <label className="block text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2 ml-1">Nom du Produit</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={editingProduct.name}
-                  onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
                   className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-orange-500"
                 />
               </div>
@@ -171,25 +192,25 @@ const SettingsView: React.FC = () => {
                 <label className="block text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2 ml-1">Prix de Base (Ariary)</label>
                 <p className="text-[8px] text-gray-400 font-bold uppercase mb-2">Conversion: {formatPrice(editingProduct.price)}</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     step="100"
                     value={editingProduct.price}
-                    onChange={(e) => setEditingProduct({...editingProduct, price: parseFloat(e.target.value) || 0})}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
                     className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-orange-500"
                   />
-                  <select 
+                  <select
                     value={editingProduct.category}
-                    onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
                     className="w-full bg-gray-50 border-0 rounded-2xl py-4 px-6 font-bold text-gray-900 text-sm focus:ring-2 focus:ring-orange-500 uppercase tracking-widest"
                   >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
 
               <div className="flex space-x-3 pt-4">
-                <button 
+                <button
                   type="submit"
                   className="flex-1 bg-gray-900 text-white font-black py-5 rounded-[2.5rem] uppercase tracking-widest text-xs shadow-2xl active:scale-95 transition-all"
                 >
