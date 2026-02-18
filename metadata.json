@@ -1,0 +1,8 @@
+
+{
+  "name": "GastroFlow POS",
+  "description": "A high-performance restaurant and bar management PWA with real-time order tracking, kitchen display, and administrative controls.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
