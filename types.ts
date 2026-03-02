@@ -40,6 +40,7 @@ export interface Order {
   id: string;
   tableNumber: string;
   customerName?: string;
+  serverName?: string;
   items: OrderItem[];
   status: OrderStatus;
   timestamp: Date;

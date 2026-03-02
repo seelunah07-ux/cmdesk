@@ -1,31 +1,64 @@
 
-import React, { useContext, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useContext, useMemo, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { OrderStatus, Currency } from '../types';
 import { EXCHANGE_RATES } from '../constants';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ordersApi, Order as SupaOrder } from '../src/lib/supabase';
 
 const AdminDashboardView: React.FC = () => {
   const context = useContext(AppContext);
+  const navigate = useNavigate();
+  const [allOrders, setAllOrders] = useState<SupaOrder[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Fetch ALL orders (including paid/historical) for dashboard stats
+  const fetchOrders = () => {
+    ordersApi.getAll().then(setAllOrders).catch(console.error);
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
 
   const stats = useMemo(() => {
-    const totalOrders = context?.orders.length || 0;
+    const paidOrders = allOrders.filter(o => o.status === 'Payé');
+    const revenue = paidOrders.reduce((sum, o) => sum + o.total, 0);
+    const totalOrders = allOrders.length;
+
+    // Active orders from context (real-time)
     const activeOrders = context?.orders.filter(o => [OrderStatus.PENDING, OrderStatus.PREPARING, OrderStatus.READY].includes(o.status)).length || 0;
-    const revenue = context?.orders.filter(o => o.status === OrderStatus.PAID).reduce((sum, o) => sum + o.total, 0) || 0;
 
-    const data = [
-      { name: 'Lun', sales: 400 },
-      { name: 'Mar', sales: 300 },
-      { name: 'Mer', sales: 600 },
-      { name: 'Jeu', sales: 800 },
-      { name: 'Ven', sales: 900 },
-      { name: 'Sam', sales: 1200 },
-      { name: 'Dim', sales: 1000 },
-    ];
+    // Weekly performance: compute sales per day for the current week (Mon–Sun)
+    const now = new Date();
+    const currentDayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const monday = new Date(now);
+    const diffToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+    monday.setDate(now.getDate() + diffToMonday);
+    monday.setHours(0, 0, 0, 0);
 
-    return { totalOrders, activeOrders, revenue, data };
-  }, [context?.orders]);
+    const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    const data = weekDays.map((name, i) => {
+      const dayStart = new Date(monday);
+      dayStart.setDate(monday.getDate() + i);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayStart.getDate() + 1);
+
+      const daySales = paidOrders
+        .filter(o => {
+          const orderDate = new Date(o.date_creation);
+          return orderDate >= dayStart && orderDate < dayEnd;
+        })
+        .reduce((sum, o) => sum + o.total, 0);
+
+      return { name, sales: daySales };
+    });
+
+    const todayIndex = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1;
+
+    return { totalOrders, activeOrders, revenue, data, todayIndex };
+  }, [allOrders, context?.orders]);
 
   const formatValue = (priceInAr: number) => {
     if (context?.currency === Currency.ARIARY) {
@@ -38,93 +71,151 @@ const AdminDashboardView: React.FC = () => {
     return `${priceInAr.toLocaleString()} Ar`;
   };
 
+  const handleClearTransactions = async () => {
+    if (window.confirm('Êtes-vous sûr de vouloir effacer TOUTES les transactions ? Cette action est irréversible.')) {
+      setIsDeleting(true);
+      try {
+        await ordersApi.deleteAll();
+        fetchOrders();
+        context?.refreshOrders();
+        alert('Toutes les transactions ont été effacées.');
+      } catch (err) {
+        console.error(err);
+        alert('Erreur lors de la suppression des transactions.');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      <div className="w-full md:w-64 bg-white border-r p-6 flex flex-col space-y-8 sticky top-0 md:h-screen z-20">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-            </svg>
-          </div>
-          <span className="font-black text-xl text-gray-900 tracking-tighter">GastroFlow</span>
-        </div>
+    <div className="flex-1 min-h-screen bg-[#F0FBFF] p-6 pb-32 font-['Outfit']">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-serif text-[#134E4A] italic" style={{ fontFamily: "'Playfair Display', serif" }}>Statistiques</h1>
+      </div>
 
-        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-          <label className="block text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2">Réglages Devise</label>
-          <div className="flex space-x-2">
-            {[Currency.ARIARY, Currency.USD, Currency.EURO].map((c) => (
-              <button
-                key={c}
-                onClick={() => context?.setCurrency(c)}
-                className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${context?.currency === c
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-white text-gray-400 border border-gray-100 hover:border-blue-300'
-                  }`}
-              >
-                {c === Currency.ARIARY ? 'Ar' : c}
-              </button>
-            ))}
-          </div>
-          <div className="mt-2 text-[8px] font-bold text-gray-400 text-center uppercase">
-            1 USD = 4500 Ar | 1 EUR = 5200 Ar
+      {/* Revenue Hero Card */}
+      <div className="bg-[#14B8D4] rounded-[2.5rem] p-8 mb-6 shadow-[0_10px_30px_rgba(20,184,212,0.25)] relative overflow-hidden">
+        <div className="relative z-10 flex justify-between items-center">
+          <p className="text-white/90 text-sm font-bold tracking-tight">Chiffre d'Affaire</p>
+          <div className="text-3xl font-serif text-white italic" style={{ fontFamily: "'Playfair Display', serif" }}>
+            {formatValue(stats.revenue)}
           </div>
         </div>
+        {/* Decorative circle */}
+        <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+      </div>
 
-        <nav className="flex-1 space-y-1">
-          <Link to="/admin" className="flex items-center space-x-3 p-3 rounded-xl bg-blue-50 text-blue-600 font-bold text-xs uppercase tracking-widest">
-            <span>Tableau de Bord</span>
-          </Link>
-          <Link to="/admin/products" className="flex items-center space-x-3 p-3 rounded-xl text-gray-400 hover:bg-gray-50 font-bold text-xs uppercase tracking-widest transition-colors">
-            <span>Inventaire</span>
-          </Link>
-          <Link to="/admin/users" className="flex items-center space-x-3 p-3 rounded-xl text-gray-400 hover:bg-gray-50 font-bold text-xs uppercase tracking-widest transition-colors">
-            <span>Personnel</span>
-          </Link>
-        </nav>
+      {/* Quick Stats Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="bg-white rounded-[2rem] p-6 text-center shadow-sm">
+          <p className="text-[#22D3EE] text-[2.5rem] font-black leading-none mb-2">{stats.activeOrders}</p>
+          <p className="text-[#22D3EE] text-[9px] font-black uppercase tracking-wider">Service Actif</p>
+        </div>
+        <div className="bg-white rounded-[2rem] p-6 text-center shadow-sm">
+          <p className="text-[#22D3EE] text-[2.5rem] font-black leading-none mb-2">{stats.totalOrders}</p>
+          <p className="text-[#22D3EE] text-[9px] font-black uppercase tracking-wider">Total Commandes</p>
+        </div>
+      </div>
 
-        <button onClick={() => context?.setUser(null)} className="text-gray-400 hover:text-red-500 flex items-center space-x-3 p-3 transition-colors">
-          <span className="font-bold text-[10px] uppercase tracking-widest">Déconnexion</span>
+      {/* Navigation Buttons */}
+      <div className="grid grid-cols-1 gap-4 mb-10">
+        <button
+          onClick={() => navigate('/admin/products')}
+          className="bg-white rounded-[1.5rem] p-5 flex items-center justify-center space-x-3 shadow-sm active:scale-95 transition-transform"
+        >
+          <span className="text-2xl">📦</span>
+          <span className="text-[#134E4A] font-black text-[10px] uppercase tracking-widest">Inventaire</span>
         </button>
       </div>
 
-      <div className="flex-1 p-8">
-        <h2 className="text-3xl font-black text-gray-900 mb-8 tracking-tighter uppercase">Statistiques Entreprise</h2>
+      {/* Performance Chart */}
+      <div className="bg-white rounded-[2.5rem] p-8 mb-10 shadow-sm border border-white/50">
+        <h3 className="text-[#22D3EE] font-black text-[10px] uppercase tracking-widest mb-6 px-1">Performance Hebdomadaire</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stats.data}>
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 'bold' }}
+                dy={10}
+              />
+              <Tooltip
+                cursor={{ fill: '#F1F5F9' }}
+                contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 20px rgba(0,0,0,0.05)', fontSize: '10px', fontWeight: 'bold' }}
+                formatter={(value: number) => [formatValue(value), 'Ventes']}
+              />
+              <Bar dataKey="sales" radius={[8, 8, 8, 8]} barSize={24}>
+                {stats.data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={index === stats.todayIndex ? '#22D3EE' : '#F1F5F9'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Chiffre d'Affaires</p>
-            <h3 className="text-2xl font-black text-gray-900 tracking-tighter">{formatValue(stats.revenue)}</h3>
-            <p className="text-green-500 text-[9px] mt-2 font-black uppercase tracking-widest">+12% Gain</p>
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Service Actif</p>
-            <h3 className="text-2xl font-black text-gray-900 tracking-tighter">{stats.activeOrders} Commandes</h3>
-            <p className="text-blue-600 text-[9px] mt-2 font-black uppercase tracking-widest">En Direct</p>
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Volume Total</p>
-            <h3 className="text-2xl font-black text-gray-900 tracking-tighter">{stats.totalOrders}</h3>
-            <p className="text-gray-400 text-[9px] mt-2 font-black uppercase tracking-widest">Compteur Journalier</p>
-          </div>
+      {/* Transactions Table Section */}
+      <div className="mb-12">
+        <div className="flex justify-between items-center mb-6 px-2">
+          <h3 className="text-[#22D3EE] font-black text-[10px] uppercase tracking-widest">Dernières Transactions</h3>
+          <button
+            onClick={() => navigate('/cashier')}
+            className="text-[#22D3EE] font-bold text-[10px] uppercase tracking-widest flex items-center"
+          >
+            Voir tout <span className="ml-1">→</span>
+          </button>
         </div>
 
-        <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 mb-10">
-          <h3 className="font-black text-gray-900 mb-6 text-sm uppercase tracking-widest">Performance Hebdomadaire</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.data}>
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }} dy={10} />
-                <Tooltip cursor={{ fill: '#f9fafb' }} contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }} />
-                <Bar dataKey="sales" radius={[12, 12, 0, 0]}>
-                  {stats.data.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === 5 ? '#2563eb' : '#e5e7eb'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-white/50">
+          <div className="grid grid-cols-3 gap-4 p-6 border-b border-gray-50 bg-gray-50/50">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Table</span>
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</span>
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Montant</span>
+          </div>
+
+          <div className="divide-y divide-gray-50">
+            {allOrders.filter(o => o.status === 'Payé').slice(0, 5).map(order => (
+              <div key={order.id} className="grid grid-cols-3 gap-4 p-6 items-center">
+                <div className="text-center">
+                  <span className="bg-[#F8FAFC] w-10 h-10 rounded-xl flex items-center justify-center mx-auto text-xs font-black text-slate-700 border border-slate-100 italic">
+                    {order.table_number}
+                  </span>
+                </div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase">
+                  {new Date(order.date_creation).toLocaleDateString([], { day: '2-digit', month: 'short' })}
+                </div>
+                <div className="text-[11px] font-black text-slate-700 text-right italic">
+                  {formatValue(order.total)}
+                </div>
+              </div>
+            ))}
+            {allOrders.filter(o => o.status === 'Payé').length === 0 && (
+              <div className="py-12 text-center">
+                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Aucune transaction</p>
+              </div>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Maintenance Section */}
+      <div className="mt-12 bg-white/50 rounded-[2rem] p-8 flex items-center justify-between border border-white">
+        <div>
+          <h3 className="text-[#22D3EE] font-black text-[10px] uppercase tracking-widest">Maintenance Système</h3>
+          <p className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mt-1">Actions Sensibles</p>
+        </div>
+        <button
+          onClick={handleClearTransactions}
+          disabled={isDeleting}
+          className="bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] px-6 py-4 rounded-2xl flex items-center space-x-3 transition-colors disabled:opacity-50"
+        >
+          <span role="img" aria-label="trash">🗑️</span>
+          <span className="font-black text-[10px] uppercase tracking-widest">Effacer</span>
+        </button>
       </div>
     </div>
   );

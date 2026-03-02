@@ -46,74 +46,55 @@ const AdminUsersView: React.FC = () => {
    };
 
    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-         <div className="w-full md:w-64 bg-white border-r p-6 flex flex-col space-y-8 sticky top-0 md:h-screen">
-            <div className="flex items-center space-x-3">
-               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                  </svg>
-               </div>
-               <span className="font-black text-xl text-gray-900">GastroFlow</span>
-            </div>
-
-            <nav className="flex-1 space-y-2">
-               <Link to="/admin" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
-                  <span>Dashboard</span>
-               </Link>
-               <Link to="/admin/products" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
-                  <span>Inventaire</span>
-               </Link>
-               <Link to="/admin/users" className="flex items-center space-x-3 p-3 rounded-xl bg-blue-50 text-blue-600 font-bold border-l-4 border-blue-600">
-                  <span>Personnel</span>
-               </Link>
-            </nav>
-         </div>
-
-         <div className="flex-1 p-8">
-            <div className="flex justify-between items-center mb-8">
+      <div className="flex-1 p-8 bg-gray-50 min-h-screen">
+         <div className="max-w-[1400px] mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
                <div>
-                  <h2 className="text-3xl font-black text-gray-900">Gestion du Personnel</h2>
-                  <p className="text-gray-500">Ajoutez des membres et gérez leurs accès</p>
+                  <h2 className="text-3xl font-black text-gray-900 tracking-tighter uppercase">Gestion du Personnel</h2>
+                  <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Gérez votre équipe et leurs permissions</p>
                </div>
                <button
                   onClick={() => setIsAdding(true)}
-                  className="bg-blue-600 px-6 py-3 rounded-2xl font-bold text-white shadow-lg shadow-blue-100 flex items-center space-x-2 active:scale-95 transition-all"
+                  className="bg-blue-600 px-8 py-4 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] text-white shadow-xl shadow-blue-100 flex items-center space-x-3 active:scale-95 transition-all hover:bg-blue-700"
                >
-                  <span>Ajouter un Employé</span>
+                  <span className="text-lg">+</span>
+                  <span>Recruter un Employé</span>
                </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                {context?.users.map(u => (
-                  <div key={u.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                     <div className="flex justify-between items-start mb-6">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center font-black text-2xl text-gray-400 uppercase">
+                  <div key={u.id} className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 hover:shadow-2xl hover:shadow-gray-200/40 transition-all group">
+                     <div className="flex justify-between items-start mb-8">
+                        <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center font-black text-3xl text-gray-300 uppercase shadow-inner border border-gray-100">
                            {u.name[0]}
                         </div>
                         <div className="flex flex-col items-end">
-                           <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase mb-2 bg-gray-100">
+                           <span className="px-4 py-1.5 rounded-full text-[9px] font-black uppercase mb-3 bg-gray-100 text-gray-500 tracking-widest">
                               {u.role}
                            </span>
-                           <span className={`text-[10px] font-bold uppercase ${u.isActive ? 'text-green-500' : 'text-red-500'}`}>
-                              {u.isActive ? 'Actif' : 'Inactif'}
-                           </span>
+                           <div className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 rounded-full ${u.isActive ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`} />
+                              <span className={`text-[10px] font-black uppercase tracking-widest ${u.isActive ? 'text-green-600' : 'text-red-500'}`}>
+                                 {u.isActive ? 'En Service' : 'Désactivé'}
+                              </span>
+                           </div>
                         </div>
                      </div>
 
-                     <div className="mb-6">
-                        <h3 className="text-xl font-bold text-gray-900">{u.name}</h3>
-                        <p className="text-sm text-gray-400 font-medium">{u.email}</p>
+                     <div className="mb-8">
+                        <h3 className="text-2xl font-black text-gray-900 tracking-tighter mb-1 uppercase group-hover:text-blue-600 transition-colors uppercase">{u.name}</h3>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{u.email}</p>
                      </div>
 
-                     <div className="flex space-x-3 border-t pt-6">
-                        <button className="flex-1 py-3 border border-gray-100 rounded-xl text-gray-600 font-bold text-xs hover:bg-gray-50 transition-colors">Éditer</button>
+                     <div className="flex space-x-3 border-t border-gray-50 pt-8">
+                        <button className="flex-1 py-4 bg-gray-50 rounded-2xl text-gray-900 font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all">Détails</button>
                         <button
                            onClick={() => toggleUserStatus(u.id)}
-                           className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${u.isActive ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
+                           className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg ${u.isActive ? 'bg-red-50 text-red-600 shadow-red-50 hover:bg-red-600 hover:text-white' : 'bg-green-50 text-green-600 shadow-green-50 hover:bg-green-600 hover:text-white'
                               }`}
                         >
-                           {u.isActive ? 'Désactiver' : 'Activer'}
+                           {u.isActive ? 'Suspendre' : 'Réactiver'}
                         </button>
                      </div>
                   </div>

@@ -2,10 +2,10 @@
 import React, { useState, useContext } from 'react';
 import { AppContext } from '../App';
 import { Currency } from '../types';
-import { authApi, staffApi } from '../src/lib/supabase';
+import { authApi, staffApi, settingsApi } from '../src/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Step = 'saas-login' | 'role-select';
+type Step = 'saas-login' | 'role-select' | 'pin-entry';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const LogoIcon = () => (
@@ -48,6 +48,58 @@ const ArrowLeftIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
   </svg>
 );
+
+const PinPad: React.FC<{ onPinComplete: (pin: string) => void; onBack: () => void }> = ({ onPinComplete, onBack }) => {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleKeyClick = (key: string) => {
+    if (key === 'DELETE') {
+      setPin(prev => prev.slice(0, -1));
+      setError(false);
+    } else if (pin.length < 4) {
+      const newPin = pin + key;
+      setPin(newPin);
+      if (newPin.length === 4) {
+        onPinComplete(newPin);
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center w-full">
+      <div className="flex gap-4 mb-8">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${pin.length > i
+              ? 'bg-blue-600 border-blue-600 scale-125'
+              : 'bg-white border-gray-200'
+              } ${error ? 'border-red-500 bg-red-500' : ''}`}
+          />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 w-full max-w-[300px]">
+        {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BACK', '0', 'DELETE'].map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => key === 'BACK' ? onBack() : handleKeyClick(key)}
+            className={`h-14 rounded-2xl flex items-center justify-center text-xl font-black transition-all active:scale-90 ${key === 'BACK'
+              ? 'text-gray-400 bg-gray-50'
+              : key === 'DELETE'
+                ? 'text-red-500 bg-red-50'
+                : 'bg-gray-50 text-gray-900 hover:bg-gray-100'
+              }`}
+          >
+            {key === 'BACK' ? <ArrowLeftIcon /> : key === 'DELETE' ? '✕' : key}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 // ─── Role Card ────────────────────────────────────────────────────────────────
 interface RoleCardProps {
@@ -100,6 +152,8 @@ const LoginView: React.FC = () => {
   const [error, setError] = useState('');
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [pinError, setPinError] = useState('');
 
   // ── Step 1: SaaS owner login ───────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
@@ -131,36 +185,104 @@ const LoginView: React.FC = () => {
     }
   };
 
-  // ── Step 2: Direct role access ─────────────────────────────────────────────
+  // ── Step 2: PIN selection ───────────────────────────────────────────────
+  const handleRoleSelection = (role: string) => {
+    setSelectedRole(role);
+    setPinError('');
+    setStep('pin-entry');
+  };
+
+  // ── Step 3: PIN verification & Role access ────────────────────────────────
+  const handlePinComplete = async (pin: string) => {
+    if (!selectedRole) return;
+
+    setLoading(true);
+    setPinError('');
+
+    try {
+      const settingKey = `pin_${selectedRole}`;
+      let correctPin = await settingsApi.get(settingKey);
+
+      // Default for Admin is 1234
+      if (!correctPin && selectedRole === 'Administrateur') {
+        correctPin = '1234';
+      }
+
+      if (pin === correctPin || (!correctPin && selectedRole !== 'Administrateur')) {
+        await handleRoleLogin(selectedRole);
+      } else {
+        setPinError('Code PIN incorrect.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('PIN verification error:', err);
+      setPinError('Erreur de vérification.');
+      setLoading(false);
+    }
+  };
+
   const handleRoleLogin = async (role: string) => {
     setRoleLoading(role);
     setRoleError(null);
     try {
       const allStaff = await staffApi.getAll();
-      const member = allStaff.find(s => s.role === role && s.is_active);
+      let member = allStaff.find(s => s.role === role && (s as any).is_active !== false);
+
+      // Fallback for all roles if no profile exists in database (initial setup)
+      // This allows the app to be used immediately if the PIN is correct
+      if (!member) {
+        member = {
+          id: `virtual-${role.toLowerCase()}`,
+          nom: role,
+          name: role,
+          email: `${role.toLowerCase()}@cmdesk.com`,
+          role: role as any,
+          is_active: true,
+        } as any;
+      }
 
       if (!member) {
         setRoleError(role);
+        setStep('role-select');
         setTimeout(() => setRoleError(null), 2500);
         setRoleLoading(null);
+        setLoading(false);
         return;
       }
 
-      context?.setUser({
+      const userData = {
         id: member.id,
-        name: member.nom,
+        name: member.nom || (member as any).name || 'Inconnu',
         email: member.email,
         role: member.role as any,
-        isActive: member.is_active,
-      });
+        isActive: member.is_active ?? true,
+      };
+
+      localStorage.setItem('cmdesk_persistent_user', JSON.stringify(userData));
+      context?.setUser(userData);
     } catch (err) {
       console.error('Role login error:', err);
       setRoleLoading(null);
+      setLoading(false);
     }
   };
 
+  // Restore session on mount
+  React.useEffect(() => {
+    const saved = localStorage.getItem('cmdesk_persistent_user');
+    if (saved && !context?.user) {
+      try {
+        const parsed = JSON.parse(saved);
+        context?.setUser(parsed);
+      } catch (e) {
+        localStorage.removeItem('gastroflow_persistent_user');
+      }
+    }
+  }, [context]);
+
   const handleFullLogout = async () => {
     await authApi.signOut().catch(() => { });
+    localStorage.removeItem('cmdesk_persistent_user');
     context?.setIsSaaSAuthenticated(false);
     setStep('saas-login');
     setEmail('');
@@ -201,7 +323,7 @@ const LoginView: React.FC = () => {
         <div className="w-16 h-16 bg-white/20 backdrop-blur-sm border-2 border-white/40 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xl">
           <LogoIcon />
         </div>
-        <h1 className="text-2xl font-black text-white tracking-tighter uppercase">GastroFlow</h1>
+        <h1 className="text-2xl font-black text-white tracking-tighter uppercase">CMDesk</h1>
         <p className="text-white/70 mt-1 font-bold text-[8px] uppercase tracking-[0.2em]">Solution POS Professionnelle</p>
       </div>
 
@@ -320,7 +442,7 @@ const LoginView: React.FC = () => {
               iconBg="bg-blue-100"
               loading={roleLoading === 'Serveur'}
               error={roleError === 'Serveur'}
-              onClick={() => handleRoleLogin('Serveur')}
+              onClick={() => handleRoleSelection('Serveur')}
             />
             <RoleCard
               label="Cuisine"
@@ -332,7 +454,7 @@ const LoginView: React.FC = () => {
               iconBg="bg-green-100"
               loading={roleLoading === 'Cuisine'}
               error={roleError === 'Cuisine'}
-              onClick={() => handleRoleLogin('Cuisine')}
+              onClick={() => handleRoleSelection('Cuisine')}
             />
             <RoleCard
               label="Caissier"
@@ -344,7 +466,7 @@ const LoginView: React.FC = () => {
               iconBg="bg-purple-100"
               loading={roleLoading === 'Caissier'}
               error={roleError === 'Caissier'}
-              onClick={() => handleRoleLogin('Caissier')}
+              onClick={() => handleRoleSelection('Caissier')}
             />
             <RoleCard
               label="Admin"
@@ -356,7 +478,7 @@ const LoginView: React.FC = () => {
               iconBg="bg-cyan-100"
               loading={roleLoading === 'Administrateur'}
               error={roleError === 'Administrateur'}
-              onClick={() => handleRoleLogin('Administrateur')}
+              onClick={() => handleRoleSelection('Administrateur')}
             />
           </div>
 
@@ -368,9 +490,44 @@ const LoginView: React.FC = () => {
         </div>
       )}
 
+      {/* ── STEP 3: PIN Entry ── */}
+      {step === 'pin-entry' && (
+        <div className="relative z-10 w-full bg-white rounded-3xl shadow-2xl shadow-blue-100/60 p-6">
+          <div className="flex items-center gap-3 mb-8">
+            <button
+              onClick={() => setStep('role-select')}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-all flex-shrink-0"
+            >
+              <ArrowLeftIcon />
+            </button>
+            <div>
+              <h2 className="text-[15px] font-black text-gray-900 uppercase tracking-tight">Code PIN Requis</h2>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-widest">Poste: {selectedRole}</p>
+            </div>
+          </div>
+
+          <PinPad
+            onPinComplete={handlePinComplete}
+            onBack={() => setStep('role-select')}
+          />
+
+          {pinError && (
+            <p className="mt-6 text-[10px] font-black uppercase text-center text-red-500 bg-red-50 py-3 rounded-2xl border border-red-100">
+              {pinError}
+            </p>
+          )}
+
+          {loading && (
+            <div className="flex items-center justify-center mt-6">
+              <span className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Footer */}
       <p className="relative z-10 mt-5 text-[8px] text-gray-400 font-bold uppercase tracking-widest">
-        GastroFlow © {new Date().getFullYear()} — Solution POS SaaS
+        CMDesk © {new Date().getFullYear()} — Solution POS SaaS
       </p>
     </div>
   );

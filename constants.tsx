@@ -13,10 +13,10 @@ export const INITIAL_PRODUCTS: Product[] = [
 ];
 
 export const INITIAL_USERS: User[] = [
-  { id: '1', name: 'Alex Johnson', role: UserRole.ADMIN, email: 'admin@gastroflow.com', isActive: true },
-  { id: '2', name: 'Sarah Smith', role: UserRole.SERVER, email: 'sarah@gastroflow.com', isActive: true },
-  { id: '3', name: 'Chef Marco', role: UserRole.KITCHEN, email: 'kitchen@gastroflow.com', isActive: true },
-  { id: '4', name: 'Emily Cash', role: UserRole.CASHIER, email: 'cashier@gastroflow.com', isActive: true },
+  { id: '1', name: 'Administrateur', role: UserRole.ADMIN, email: 'admin@cmdesk.com', isActive: true },
+  { id: '2', name: 'Service', role: UserRole.SERVER, email: 'serveur@cmdesk.com', isActive: true },
+  { id: '3', name: 'Cuisine', role: UserRole.KITCHEN, email: 'cuisine@cmdesk.com', isActive: true },
+  { id: '4', name: 'Caisse', role: UserRole.CASHIER, email: 'caisse@cmdesk.com', isActive: true },
 ];
 
 export const CATEGORIES = ['Plats', 'Boissons', 'Desserts', 'Snacks'];

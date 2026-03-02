@@ -3,7 +3,8 @@ import React, { useState, useContext, useRef } from 'react';
 import { AppContext } from '../App';
 import { Product, Currency } from '../types';
 import { EXCHANGE_RATES } from '../constants';
-import { produitsApi, storageApi } from '../src/lib/supabase';
+import { produitsApi, storageApi, settingsApi } from '../src/lib/supabase';
+import { UserRole } from '../types';
 
 const SettingsView: React.FC = () => {
   const context = useContext(AppContext);
@@ -11,9 +12,65 @@ const SettingsView: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem('gastroflow_sound') !== 'off');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pins, setPins] = useState<{ [key: string]: string }>({
+    'Administrateur': '',
+    'Serveur': '',
+    'Cuisine': '',
+    'Caissier': ''
+  });
+  const [isSavingPin, setIsSavingPin] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchPins = async () => {
+      const roles = ['Administrateur', 'Serveur', 'Cuisine', 'Caissier'];
+      const fetchedPins: { [key: string]: string } = {};
+      for (const role of roles) {
+        const pin = await settingsApi.get(`pin_${role}`);
+        fetchedPins[role] = pin || (role === 'Administrateur' ? '1234' : '');
+      }
+      setPins(fetchedPins);
+    };
+    if (context?.user?.role === UserRole.ADMIN) {
+      fetchPins();
+    }
+  }, [context?.user?.role]);
+
+  const handleUpdatePin = async (role: string, newPin: string) => {
+    if (newPin.length !== 4) return;
+    setIsSavingPin(role);
+    try {
+      await settingsApi.set(`pin_${role}`, newPin);
+      setPins(prev => ({ ...prev, [role]: newPin }));
+    } catch (err) {
+      console.error('Error updating PIN:', err);
+    } finally {
+      setIsSavingPin(null);
+    }
+  };
 
   const products = context?.products || [];
+
+  const toggleSound = () => {
+    const newVal = !soundEnabled;
+    setSoundEnabled(newVal);
+    localStorage.setItem('gastroflow_sound', newVal ? 'on' : 'off');
+
+    // Test sound
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
+      setTimeout(() => ctx.close(), 400);
+    } catch (e) { }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,69 +132,125 @@ const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col p-6">
-      <div className="mb-6 flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Configuration Terminal</h1>
-          <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Paramètres Opérationnels</p>
-        </div>
-      </div>
-
-      {/* Section Config Globale */}
-      <div className="bg-white rounded-[2rem] p-6 mb-8 border border-gray-100 shadow-sm">
-        <h2 className="text-[10px] font-black uppercase text-gray-900 tracking-widest mb-4 flex items-center">
-          <span className="mr-2">🌍</span> Préférences Globales
-        </h2>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-tighter">Devise Active</span>
-            <div className="text-right">
-              <select
-                value={context?.currency}
-                onChange={(e) => context?.setCurrency(e.target.value as Currency)}
-                className="bg-gray-50 border-0 rounded-xl py-2 px-4 text-[10px] font-black text-blue-600 uppercase focus:ring-2 focus:ring-blue-600"
-              >
-                <option value={Currency.ARIARY}>Ariary (Ar)</option>
-                <option value={Currency.USD}>Dollar ($)</option>
-                <option value={Currency.EURO}>Euro (€)</option>
-              </select>
-              <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">1$ = 4500Ar | 1€ = 5200Ar</p>
-            </div>
+    <div className="flex-1 p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-[1400px] mx-auto">
+        <div className="mb-10 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tighter">Configuration Terminal</h1>
+            <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Gérez vos périphériques et catalogue local</p>
           </div>
         </div>
-      </div>
 
-      <div className="mb-6 relative">
-        <input
-          type="text"
-          placeholder="Rechercher dans le catalogue..."
-          className="w-full bg-white border-0 rounded-[1.5rem] py-4 px-6 pl-12 shadow-sm text-sm font-bold focus:ring-2 focus:ring-blue-600 placeholder:text-gray-300"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 opacity-30">🔍</span>
-      </div>
+        <div className="grid grid-cols-1 gap-8 mb-10">
+          {/* Section Config Globale */}
+          <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm">
+            <h2 className="text-[11px] font-black uppercase text-gray-900 tracking-[0.2em] mb-6 flex items-center">
+              <span className="mr-3 text-xl">🌍</span> Préférences Système
+            </h2>
 
-      <div className="space-y-3 overflow-y-auto flex-1">
-        {filteredProducts.map(product => (
-          <div
-            key={product.id}
-            onClick={() => setEditingProduct(product)}
-            className={`bg-white rounded-[2rem] p-4 shadow-sm border border-gray-100 flex items-center justify-between transition-all active:scale-95 cursor-pointer hover:border-blue-300 ${!product.isActive ? 'opacity-40 grayscale' : ''}`}
-          >
-            <div className="flex items-center space-x-4">
-              <img src={product.image} className="w-14 h-14 rounded-2xl object-cover shadow-sm" alt="" />
-              <div>
-                <h3 className="font-bold text-gray-900 text-xs uppercase tracking-tighter">{product.name}</h3>
-                <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-0.5">{formatPrice(product.price)}</p>
+            {/* Notification Sound */}
+            <div className="p-6 bg-gray-50/50 rounded-3xl border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-black text-gray-900 uppercase tracking-tighter">Son de Notification</span>
+                  <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase">Jouer un son lors d'un changement de statut</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={toggleSound}
+                    className={`relative w-14 h-8 rounded-full transition-all duration-300 ${soundEnabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+                  >
+                    <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${soundEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
-              <div className={`w-2 h-2 rounded-full ${product.isActive ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.3)]' : 'bg-red-400'}`}></div>
-              <span className="text-gray-300 text-xl font-light">›</span>
+          </div>
+        </div>
+
+        {/* Section PIN (Admin Only) */}
+        {context?.user?.role === UserRole.ADMIN && (
+          <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm mb-10">
+            <h2 className="text-[11px] font-black uppercase text-gray-900 tracking-[0.2em] mb-6 flex items-center">
+              <span className="mr-3 text-xl">🔐</span> Codes PIN de Sécurité
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(pins).map(([role, pin]) => (
+                <div key={role} className="p-5 bg-gray-50/50 rounded-3xl border border-gray-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-gray-900 uppercase tracking-tighter">{role}</span>
+                    <p className="text-[9px] text-gray-400 font-bold mt-0.5 uppercase">Accès protégé par PIN</p>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      maxLength={4}
+                      placeholder="----"
+                      value={pin}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPins(prev => ({ ...prev, [role]: val }));
+                        if (val.length === 4) handleUpdatePin(role, val);
+                      }}
+                      className="w-20 bg-white border-0 rounded-xl px-3 py-2 text-center font-black tracking-[0.5em] text-gray-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none shadow-sm"
+                    />
+                    {isSavingPin === role && (
+                      <div className="absolute -right-6 top-1/2 -translate-y-1/2">
+                        <div className="w-3 h-3 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-[8px] text-gray-400 font-bold uppercase tracking-widest text-center">
+              Les modifications sont enregistrées automatiquement dès que 4 chiffres sont saisis.
+            </p>
+          </div>
+        )}
+
+        <div className="bg-white rounded-[3rem] p-8 border border-gray-100 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <h2 className="text-[11px] font-black uppercase text-gray-900 tracking-[0.2em] flex items-center">
+              <span className="mr-3 text-xl">📋</span> Catalogue Rapide
+            </h2>
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Filtrer les articles..."
+                className="w-full bg-gray-50 border-2 border-transparent rounded-2xl py-3.5 px-6 pl-12 text-sm font-bold focus:bg-white focus:border-blue-100 focus:ring-0 transition-all placeholder:text-gray-300"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 opacity-40">🔍</span>
             </div>
           </div>
-        ))}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredProducts.map(product => (
+              <div
+                key={product.id}
+                onClick={() => setEditingProduct(product)}
+                className={`bg-white rounded-[2rem] p-5 border-2 border-gray-50 flex items-center justify-between transition-all hover:border-blue-400 active:scale-95 cursor-pointer group ${!product.isActive ? 'opacity-40 grayscale' : ''}`}
+              >
+                <div className="flex items-center space-x-5">
+                  <div className="relative">
+                    <img src={product.image} className="w-16 h-16 rounded-2xl object-cover shadow-md group-hover:scale-110 transition-transform duration-500" alt="" />
+                    {!product.isActive && <div className="absolute inset-0 bg-red-500/20 rounded-2xl animate-pulse" />}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-gray-900 text-xs uppercase tracking-tighter group-hover:text-blue-600 transition-colors">{product.name}</h3>
+                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mt-1">{formatPrice(product.price)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className={`w-2.5 h-2.5 rounded-full ${product.isActive ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.4)]' : 'bg-red-500'}`} />
+                  <span className="text-gray-200 text-2xl font-light transform transition-transform group-hover:translate-x-1">›</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {editingProduct && (

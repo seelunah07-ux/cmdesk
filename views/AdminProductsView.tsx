@@ -117,32 +117,8 @@ const AdminProductsView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <div className="w-full md:w-64 bg-white border-r p-6 flex flex-col space-y-8 sticky top-0 md:h-screen">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-            </svg>
-          </div>
-          <span className="font-black text-xl text-gray-900">GastroFlow</span>
-        </div>
-
-        <nav className="flex-1 space-y-2">
-          <Link to="/admin" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
-            <span>Dashboard</span>
-          </Link>
-          <Link to="/admin/products" className="flex items-center space-x-3 p-3 rounded-xl bg-blue-50 text-blue-600 font-bold border-l-4 border-blue-600">
-            <span>Inventaire</span>
-          </Link>
-          <Link to="/admin/users" className="flex items-center space-x-3 p-3 rounded-xl text-gray-500 hover:bg-gray-50 font-semibold transition-colors">
-            <span>Personnel</span>
-          </Link>
-        </nav>
-      </div>
-
-      <div className="flex-1 p-8">
+    <div className="flex-1 p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-[1400px] mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h2 className="text-3xl font-black text-gray-900">Gestion de l'Inventaire</h2>

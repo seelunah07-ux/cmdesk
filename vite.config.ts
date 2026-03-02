@@ -6,6 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
+    base: './',
     server: {
       port: 3000,
       host: '0.0.0.0',
@@ -19,22 +20,22 @@ export default defineConfig(({ mode }) => {
           name: 'GastroFlow POS',
           short_name: 'GastroFlow',
           description: 'Solution POS professionnelle pour restaurants',
-          theme_color: '#f97316',
+          theme_color: '#2563eb',
           background_color: '#ffffff',
           display: 'standalone',
-          orientation: 'portrait',
-          scope: '/',
-          start_url: '/',
+          orientation: 'any',
+          scope: './',
+          start_url: './',
           lang: 'fr',
           icons: [
             {
-              src: '/icons/icon-192.png',
+              src: 'icons/icon-192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any maskable',
             },
             {
-              src: '/icons/icon-512.png',
+              src: 'icons/icon-512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable',
@@ -45,7 +46,7 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           runtimeCaching: [
             {
-              urlPattern: /^https:\/\/xzeutusdqqovmpzotdte\.supabase\.co\/.*/i,
+              urlPattern: /^https:\/\/ibyxtwzuortugtxwwdor\.supabase\.co\/.*/i,
               handler: 'NetworkFirst',
               options: {
                 cacheName: 'supabase-api-cache',
